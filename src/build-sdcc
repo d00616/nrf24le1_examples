@@ -1,0 +1,41 @@
+#!/bin/bash
+FILES="blink"
+TARGETS="nrf24le1_24 nrf24le1_32 nrf24le1_48"
+SDK="../../lib_nrf24le1_sdk"
+CC="/usr/bin/sdcc"
+INCLUDES="delay/delay_s delay/delay_ms delay/delay_us gpio/gpio_pin_configure gpio/gpio_pin_val_complement"
+MAXRAM="1024"
+MAXCODE="16384"
+
+# Variables
+dir=$(pwd)
+cd "$SDK" || exit
+sdk=$(pwd)
+cc=$(basename $CC)
+
+# for every file
+for file in $FILES; do
+	# for every target
+	for target in $TARGETS; do	
+	
+		sdktarget="$sdk/_target_${cc}_${target}"
+		
+		# go to builddir
+		builddir="${dir}/../_target_${cc}_${target}/obj"
+		test -e "$builddir" || mkdir -p "$builddir"
+		cd "$builddir"
+	
+		# compile without linking
+#		$CC -mmcs51 --model-large --iram-size "$MAXRAM" --code-size "$MAXCODE"  -I "$sdk/include" -I "$sdk/_target_${cc}_${target}/include" "$dir/${file}.c" $relfiles
+		$CC -mmcs51 --model-large --iram-size "$MAXRAM" --code-size "$MAXCODE"  -I "$sdk/include" -I "$sdktarget/include" -c "$dir/${file}.c" || exit 1
+		
+		# Find needed rel-Files
+		tmprelfiles=$(cat "${file}.rel" | grep "Ref"  | awk '{ print $2}' | grep -v "^__" | sed "s/^_\([a-zA-Z0-9]*\)_\(.*\)/$(echo "$sdktarget/obj/" | sed -e 's/\\/\\\\/g' -e 's/\//\\\//g' -e 's/&/\\\&/g')\1\/\1_\2.rel/")
+		relfiles=""
+		for file in $tmprelfiles; do
+			test -f "$file" && relfiles="$relfiles $file"
+		done
+		echo "$relfiles"
+		$CC -mmcs51 --model-large --iram-size "$MAXRAM" --code-size "$MAXCODE"  -I "$sdk/include" -I "$sdk/_target_${cc}_${target}/include" ${file}.rel $relfiles || exit 1
+	done
+done
